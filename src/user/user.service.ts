@@ -11,6 +11,10 @@ export class UserService {
     ){}
 
     async save(body: any){
-        return this.userRepository.save(body);
+        return await this.userRepository.save(body);
+    }
+
+    async findOne(options: any){
+        return await this.userRepository.findOne({ where: options });
     }
 }
