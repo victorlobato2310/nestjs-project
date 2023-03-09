@@ -1,10 +1,10 @@
 import { UserService } from './user.service';
-import { Body, Controller, Post } from '@nestjs/common';
-import { BadRequestException } from '@nestjs/common/exceptions';
+import { Body, Controller, Post, Get } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common/exceptions';
 import * as bycryptjs from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt/dist';
-import { Response } from 'express';
-import { Res } from '@nestjs/common/decorators';
+import { Request, Response } from 'express';
+import { Req, Res } from '@nestjs/common/decorators';
 
 @Controller()
 export class UserController {
@@ -61,6 +61,21 @@ export class UserController {
 
         return {
             token: accessToken
+        }
+    }
+
+    @Get('user')
+    async user(
+        @Req() request: Request
+    ){
+        try {
+            const accessToken = request.headers.authorization.replace('Bearer ', '');
+            const { id } = await this.jwtService.verifyAsync(accessToken);
+            const { password, ...data } = await this.userService.findOne(id);
+            
+            return data;
+        } catch (e) {
+            throw new UnauthorizedException();
         }
     }
 }
