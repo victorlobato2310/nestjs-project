@@ -2,11 +2,15 @@ import { UserService } from './user.service';
 import { Body, Controller, Post } from '@nestjs/common';
 import { BadRequestException } from '@nestjs/common/exceptions';
 import * as bycryptjs from 'bcryptjs';
+import { JwtService } from '@nestjs/jwt/dist';
+import { Response } from 'express';
+import { Res } from '@nestjs/common/decorators';
 @Controller('user')
 export class UserController {
 
     constructor(
-        private userService: UserService
+        private userService: UserService,
+        private jwtService: JwtService
     ){}
 
 
@@ -27,7 +31,8 @@ export class UserController {
     @Post('login')
     async login(
         @Body('email') email: string,
-        @Body('password') passowrd: string
+        @Body('password') passowrd: string,
+        @Res({ passthrough: true}) response: Response
     ){
         const user = await this.userService.findOne({ email });
 
@@ -39,6 +44,21 @@ export class UserController {
             throw new BadRequestException('invalid credentials!');
         }
 
-        return user;
+        const accessToken = await this.jwtService.signAsync({
+            id: user.id
+        }, { expiresIn: '30s' });
+        
+        const refreshToken = await this.jwtService.signAsync({
+            id: user.id
+        });
+
+        response.cookie('refresh_token', refreshToken, {
+            httpOnly: true,
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
+        })
+
+        return {
+            token: accessToken
+        }
     }
 }
