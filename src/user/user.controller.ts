@@ -5,13 +5,16 @@ import * as bycryptjs from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt/dist';
 import { Request, Response } from 'express';
 import { Req, Res } from '@nestjs/common/decorators';
+import { TokenService } from './token.service';
+import { MoreThanOrEqual } from 'typeorm';
 
 @Controller()
 export class UserController {
 
     constructor(
         private userService: UserService,
-        private jwtService: JwtService
+        private jwtService: JwtService,
+        private tokenService: TokenService
     ){}
 
 
@@ -53,6 +56,15 @@ export class UserController {
             id: user.id
         });
 
+        const expired_at = new Date();
+        expired_at.setDate(expired_at.getDate() + 7);
+
+        await this.tokenService.save({
+            user_id: user.id,
+            token: refreshToken,
+            expired_at: expired_at
+        });
+
         response.status(200);
         response.cookie('refresh_token', refreshToken, {
             httpOnly: true,
@@ -71,7 +83,7 @@ export class UserController {
         try {
             const accessToken = request.headers.authorization.replace('Bearer ', '');
             const { id } = await this.jwtService.verifyAsync(accessToken);
-            const { password, ...data } = await this.userService.findOne(id);
+            const { password, ...data } = await this.userService.findOne({ id });
             
             return data;
         } catch (e) {
@@ -89,12 +101,39 @@ export class UserController {
 
             const { id } = await this.jwtService.verifyAsync(refreshToken);
 
-            const token = await this.jwtService.signAsync({ id }, { expiresIn: '30s' });
+            const tokenEntity = await this.tokenService.findOne({
+                user_id: id,
+                expired_at: MoreThanOrEqual(new Date())
+            });
+
+            if(!tokenEntity){
+                throw new UnauthorizedException();
+            }
+
+            const accessToken = await this.jwtService.signAsync({ id }, { expiresIn: '30s' });
             
             response.status(200);
 
             return {
-                token
+                token: accessToken
+            }
+        } catch (e) {
+            throw new UnauthorizedException();
+        }
+    }
+
+    @Post('logout')
+    async logout(
+        @Req() request: Request,
+        @Res({ passthrough: true }) response: Response
+    ){
+        try {
+            await this.tokenService.delete({ token: request.cookies['refresh_token'] });
+            
+            response.clearCookie('refresh_token');
+
+            return {
+                message: 'success'
             }
         } catch (e) {
             throw new UnauthorizedException();
